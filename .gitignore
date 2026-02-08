@@ -1,0 +1,6 @@
+**/__pycache__/
+.venv
+venv
+.vscode
+uv.lock
+.ruff_cache
