@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiohttp import ClientSession
 from config import Config
 from chat_manager import ChatHistory
+from telegramify_markdown import telegramify
 
 router = Router()
 
@@ -101,7 +102,9 @@ class AIChatBot:
 
         history.add_assistant_message(reply_text)
         await history.save()
-        await message.reply(reply_text, parse_mode=ParseMode.MARKDOWN_V2)
+        results = await telegramify(reply_text)
+        for item in results:
+            await message.reply(item.text, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 @router.message(Command("ии", ignore_case=True))
