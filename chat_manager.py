@@ -55,8 +55,9 @@ class ChatHistory:
         async with aiofiles.open(self._file_path, "wb") as f:
             await f.write(data)
 
-    def add_user_message(self, text: str) -> None:
-        self._messages.append({"role": "user", "content": text})
+    def add_user_message(self, user_name: str, text: str) -> None:
+        formatted_text = f"[{user_name}] {text}"
+        self._messages.append({"role": "user", "content": formatted_text})
 
     def add_assistant_message(self, text: str) -> None:
         self._messages.append({"role": "assistant", "content": text})

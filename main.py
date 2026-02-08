@@ -40,13 +40,15 @@ class AIChatBot:
             system_prompt=self.system_prompt,
         )
         await history.load()
-        history.add_user_message(user_text)
+        user_name = message.from_user.full_name or message.from_user.username or f"user_{message.from_user.id}"
+        history.add_user_message(user_name, user_text)
 
         payload = {
             "model": self.config.groq_model,
             "messages": history.messages,
             "temperature": 0.7,
             "max_tokens": 512,
+            "reasoning_effort": "none"
         }
 
         headers = {
@@ -80,6 +82,8 @@ class AIChatBot:
 async def command_ai(
     message: Message, bot: Bot, session: ClientSession, ai_bot: AIChatBot
 ):
+    if message.chat.id not in Config.chats:
+        return
     await ai_bot.handle(message, session)
 
 
