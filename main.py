@@ -104,8 +104,7 @@ class AIChatBot:
         await history.save()
         results = await telegramify(reply_text)
         for item in results:
-            print(item)
-            await message.reply(item, parse_mode=ParseMode.MARKDOWN_V2)
+            await message.reply(item.content, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 @router.message(Command("ии", ignore_case=True))
