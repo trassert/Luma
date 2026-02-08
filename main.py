@@ -90,24 +90,18 @@ class AIChatBot:
             "Content-Type": "application/json",
         }
 
-        try:
-            async with session.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                data=orjson.dumps(payload),
-                headers=headers,
-            ) as resp:
-                if resp.status != 200:
-                    return
+        async with session.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=orjson.dumps(payload),
+            headers=headers,
+        ) as resp:
 
-                data = orjson.loads(await resp.read())
-                reply_text = data["choices"][0]["message"]["content"].strip()
+            data = orjson.loads(await resp.read())
+            reply_text = data["choices"][0]["message"]["content"].strip()
 
-            history.add_assistant_message(reply_text)
-            await history.save()
-            await message.reply(reply_text, parse_mode=ParseMode.MARKDOWN_V2)
-
-        except Exception:
-            pass
+        history.add_assistant_message(reply_text)
+        await history.save()
+        await message.reply(reply_text, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 @router.message(Command("ии", ignore_case=True))
