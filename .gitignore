@@ -6,3 +6,4 @@ uv.lock
 .ruff_cache
 
 config.py
+system_prompt.txt
