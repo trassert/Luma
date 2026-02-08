@@ -1,9 +1,12 @@
 import uvloop
 import orjson
 import aiofiles
+import asyncio
+from time import time
 from pathlib import Path
 from aiogram import Bot, Dispatcher, Router
 from aiogram.types import Message
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiohttp import ClientSession
 from config import Config
@@ -12,6 +15,34 @@ from chat_manager import ChatHistory
 router = Router()
 
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "system_prompt.txt"
+
+
+class FloodWaitBase:
+    def __init__(
+        self,
+        name="FloodWaitSys",
+        timer=5,
+        exit_multiplier=3,
+        lasttime=time(),
+    ) -> None:
+        self.time = lasttime
+        self.timer = timer
+        self.exit_multiplier = exit_multiplier
+
+    def request(self):
+        now = time()
+        elapsed = now - self.time
+        if elapsed >= self.timer:  # Разрешать сразу, если прошло достаточно
+            self.time = now
+            return 0
+        wait_time = self.timer - elapsed
+        if wait_time > self.timer * self.exit_multiplier:  # Тасккилл если овер запросов
+            return False
+        self.time = now + wait_time
+        return round(wait_time)  # Возвращаем флудвайт, с уч. будущего
+
+
+FloodWait = FloodWaitBase("WaitAI", 20)
 
 
 async def load_system_prompt() -> str:
@@ -29,7 +60,6 @@ class AIChatBot:
     async def handle(self, message: Message, session: ClientSession) -> None:
         user_text = message.text.partition(" ")[2].strip()
         if not user_text:
-            await message.reply("💬 Напиши что-нибудь после /ии")
             return
 
         chat_id = message.chat.id
@@ -40,7 +70,11 @@ class AIChatBot:
             system_prompt=self.system_prompt,
         )
         await history.load()
-        user_name = message.from_user.full_name or message.from_user.username or f"user_{message.from_user.id}"
+        user_name = (
+            message.from_user.full_name
+            or message.from_user.username
+            or f"user_{message.from_user.id}"
+        )
         history.add_user_message(user_name, user_text)
 
         payload = {
@@ -48,7 +82,7 @@ class AIChatBot:
             "messages": history.messages,
             "temperature": 0.7,
             "max_tokens": 512,
-            "reasoning_effort": "none"
+            "reasoning_effort": "none",
         }
 
         headers = {
@@ -63,8 +97,6 @@ class AIChatBot:
                 headers=headers,
             ) as resp:
                 if resp.status != 200:
-                    error_text = await resp.text()
-                    await message.reply(f"⚠️ Groq error: {resp.status}\n{error_text}")
                     return
 
                 data = orjson.loads(await resp.read())
@@ -72,10 +104,10 @@ class AIChatBot:
 
             history.add_assistant_message(reply_text)
             await history.save()
-            await message.reply(reply_text)
+            await message.reply(reply_text, parse_mode=ParseMode.MARKDOWN_V2)
 
-        except Exception as e:
-            await message.reply(f"💥 Ошибка: {str(e)}")
+        except Exception:
+            pass
 
 
 @router.message(Command("ии", ignore_case=True))
@@ -84,6 +116,10 @@ async def command_ai(
 ):
     if message.chat.id not in Config.chats:
         return
+    response = FloodWait.request()
+    if response is False:
+        return
+    await asyncio.sleep(response)
     await ai_bot.handle(message, session)
 
 
