@@ -123,8 +123,10 @@ async def command_ai(
     if response is False:
         return
     if response > 0:
-        message = await message.reply()
+        message = await message.reply(f"⏳ В очереди.. ({response} сек.)")
         await asyncio.sleep(response)
+    else:
+        message = await message.reply("Генерирую ответ..")
     await ai_bot.handle(message, session)
 
 
