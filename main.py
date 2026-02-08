@@ -58,11 +58,7 @@ class AIChatBot:
         self.config = config
         self.system_prompt = system_prompt
 
-    async def handle(self, message: Message, session: ClientSession) -> None:
-        user_text = message.text.partition(" ")[2].strip()
-        if not user_text:
-            return
-
+    async def handle(self, message: Message, session: ClientSession, user_text: str, user_name: str) -> None:
         chat_id = message.chat.id
         history = ChatHistory(
             chat_id=chat_id,
@@ -71,11 +67,6 @@ class AIChatBot:
             system_prompt=self.system_prompt,
         )
         await history.load()
-        user_name = (
-            message.from_user.full_name
-            or message.from_user.username
-            or f"user_{message.from_user.id}"
-        )
         history.add_user_message(user_name, user_text)
 
         payload = {
@@ -119,6 +110,14 @@ async def command_ai(
 ):
     if message.chat.id not in Config.chats:
         return
+    user_text = message.text.partition(" ")[2].strip()
+    if not user_text:
+        return
+    user_name = (
+        message.from_user.full_name
+        or message.from_user.username
+        or f"user_{message.from_user.id}"
+    )
     response = FloodWait.request()
     if response is False:
         return
@@ -127,7 +126,7 @@ async def command_ai(
         await asyncio.sleep(response)
     else:
         message = await message.reply("Генерирую ответ..")
-    await ai_bot.handle(message, session)
+    await ai_bot.handle(message, session, user_text, user_name)
 
 
 async def main():
