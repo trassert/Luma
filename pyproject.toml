@@ -8,6 +8,7 @@ dependencies = [
     "aiofiles>=25.1.0",
     "aiogram>=3.24.0",
     "aiohttp>=3.13.3",
+    "md2tgmd>=0.3.10",
     "orjson>=3.11.7",
     "ruff>=0.15.0",
     "uvloop>=0.22.1",
