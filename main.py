@@ -58,7 +58,9 @@ class AIChatBot:
         self.config = config
         self.system_prompt = system_prompt
 
-    async def handle(self, message: Message, session: ClientSession, user_text: str, user_name: str) -> None:
+    async def handle(
+        self, message: Message, session: ClientSession, user_text: str, user_name: str
+    ) -> None:
         chat_id = message.chat.id
         history = ChatHistory(
             chat_id=chat_id,
@@ -87,9 +89,11 @@ class AIChatBot:
             data=orjson.dumps(payload),
             headers=headers,
         ) as resp:
-
             data = orjson.loads(await resp.read())
-            reply_text = data["choices"][0]["message"]["content"].strip()
+            try:
+                reply_text = data["choices"][0]["message"]["content"].strip()
+            except Exception:
+                return await message.edit_text("❗️ При ответе возникла ошибка.")
 
         history.add_assistant_message(reply_text)
         await history.save()
