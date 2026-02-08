@@ -10,6 +10,5 @@ dependencies = [
     "aiohttp>=3.13.3",
     "orjson>=3.11.7",
     "ruff>=0.15.0",
-    "telegramify-markdown>=0.5.4",
     "uvloop>=0.22.1",
 ]
