@@ -23,7 +23,7 @@ async def load_system_prompt() -> str:
 
 class AIChatBot:
     def __init__(self, config: Config):
-        self.config = config
+        self.config: Config = config
 
     async def handle(self, message: Message, session: ClientSession) -> None:
         user_text = message.text.partition(" ")[2].strip()
@@ -78,13 +78,12 @@ async def command_ai(
 
 
 async def main():
-    config = Config.from_env()
     system_prompt = await load_system_prompt()
-    bot = Bot(token=config.bot_token)
+    bot = Bot(token=Config.bot_token)
     dp = Dispatcher()
     dp.include_router(router)
 
-    ai_bot = AIChatBot(config, system_prompt)
+    ai_bot = AIChatBot(Config, system_prompt)
 
     async with ClientSession() as session:
         dp.workflow_data.update(
