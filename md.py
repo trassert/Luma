@@ -1,172 +1,213 @@
 import re
-from typing import Match
+from typing import List
 
-def _escape_plain_text(text: str) -> str:
-    """Экранирует спецсимволы MarkdownV2, кроме тех, что используются в разметке."""
-    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!\\])', r'\\\1', text)
+# Спецсимволы MarkdownV2
+MD_V2_CHARS = r'\_*[]()~`>#+-=|{}.!'
 
-def _process_inline_code(match: Match) -> str:
-    code = match.group(1)
-    code = code.replace('`', '\\`')
-    return f'`{code}`'
-
-def _process_fenced_code(match: Match) -> str:
-    code = match.group(2)
-    code = re.sub(r'([_*\[\]()~`>#+\-=|{}.!\\])', r'\\\1', code)
-    return f'```\n{code}\n```'
-
-def _process_heading(match: Match) -> str:
-    level = len(match.group(1))
-    content = match.group(2).strip()
-    content = _escape_plain_text(content)
+def _escape_outside_markup(text: str) -> str:
+    """
+    Экранирует спецсимволы MarkdownV2 ВНЕ разметки.
+    Разметка: *...*, _..._, ~...~, ||...||, `...`, ```...```
+    """
+    # Шаблоны для поиска разметки (жадные, но корректные)
+    patterns = [
+        r'\|\|.*?\|\|',  # spoiler
+        r'~.*?~',        # strikethrough
+        r'\*.*?\*',      # bold
+        r'_.*?_',        # italic
+        r'`[^`]*`',      # inline code
+        r'```[\s\S]*?```'  # fenced code
+    ]
     
-    if level == 1:
-        return f"🔴 *{content}*\n"
-    elif level == 2:
-        return f"🟠 *{content}*\n"
-    elif level in (3, 4):
-        return f"*{content}*\n"
-    else:
-        return f"_{content}_\n"
-
-def _process_image(match: Match) -> str:
-    alt = match.group(1)
-    url = match.group(2)
-    if url.startswith("tg://emoji?id="):
-        return f"![{alt}]({url})"
-    else:
-        return f"[🖼 {alt}]({url})"
-
-def _process_table_row(row: str) -> str:
-    cells = [cell.strip() for cell in row.split('|')[1:-1]]
-    escaped = [_escape_plain_text(cell) for cell in cells]
-    return " | ".join(escaped)
-
-def _process_table(match: Match) -> str:
-    lines = match.group(0).strip().split('\n')
-    if len(lines) < 2:
-        return ""
+    # Находим все участки разметки
+    markup_spans = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            markup_spans.append((match.start(), match.end()))
     
-    header = _process_table_row(lines[0])
-    body = "\n".join(_process_table_row(line) for line in lines[2:] if line.strip())
+    # Сортируем и объединяем перекрытия
+    if not markup_spans:
+        return re.sub(f'([{re.escape(MD_V2_CHARS)}])', r'\\\1', text)
     
-    table_content = f"{header}\n{body}"
-    return f"```\n{table_content}\n```"
+    markup_spans.sort()
+    merged = [markup_spans[0]]
+    for start, end in markup_spans[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    
+    # Экранируем только вне разметки
+    result = []
+    last_end = 0
+    for start, end in merged:
+        # Экранируем текст до разметки
+        plain = text[last_end:start]
+        plain = re.sub(f'([{re.escape(MD_V2_CHARS)}])', r'\\\1', plain)
+        result.append(plain)
+        # Добавляем разметку как есть
+        result.append(text[start:end])
+        last_end = end
+    
+    # Экранируем остаток
+    plain = text[last_end:]
+    plain = re.sub(f'([{re.escape(MD_V2_CHARS)}])', r'\\\1', plain)
+    result.append(plain)
+    
+    return ''.join(result)
 
-def _process_latex_inline(match: Match) -> str:
-    expr = match.group(1)
-    expr = expr.replace("\\alpha", "α").replace("\\beta", "β").replace("\\sum", "∑")
-    return f"`{expr}`"
-
-def _process_latex_display(match: Match) -> str:
-    expr = match.group(1)
-    expr = expr.replace("\\alpha", "α").replace("\\beta", "β").replace("\\sum", "∑")
-    return f"```\n{expr}\n```"
-
-def markdown_to_telegram_v2(md_text: str) -> str:
+def _convert_markdown_to_v2(md_text: str) -> str:
+    """Конвертирует GitHub-стиль Markdown → Telegram MarkdownV2."""
     text = md_text
     
-    text = re.sub(r'```(\w*)\n([\s\S]*?)\n```', _process_fenced_code, text)
+    # Заголовки
+    def _heading_repl(m):
+        level = len(m.group(1))
+        content = m.group(2).strip()
+        if level == 1: return "🔴 *{}*\n".format(_escape_outside_markup(content))
+        elif level == 2: return "🟠 *{}*\n".format(_escape_outside_markup(content))
+        elif level in (3, 4): return "*{}*\n".format(_escape_outside_markup(content))
+        else: return "_{}_\n".format(_escape_outside_markup(content))
     
-    text = re.sub(r'^(#{1,6})\s+(.*)$', _process_heading, text, flags=re.MULTILINE)
+    text = re.sub(r'^(#{1,6})\s+(.*)$', _heading_repl, text, flags=re.MULTILINE)
     
+    # Spoiler
     text = re.sub(r'\|\|(.*?)\|\|', r'||\1||', text)
     
+    # Strikethrough
     text = re.sub(r'~~(.*?)~~', r'~\1~', text)
     
+    # Bold / Italic
     text = re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
     text = re.sub(r'__(.*?)__', r'*\1*', text)
     text = re.sub(r'\*(.*?)\*', r'_\1_', text)
     text = re.sub(r'_(.*?)_', r'_\1_', text)
     
-    text = re.sub(r'!\[([^\]]*)\]\((tg://emoji[^)]+)\)', _process_image, text)
-    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', _process_image, text)
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'[\1](\2)', text)
+    # Код
+    text = re.sub(r'`([^`]*)`', r'`\1`', text)
+    text = re.sub(r'```(\w*)\n([\s\S]*?)\n```', r'```\n\2\n```', text)
     
-    text = re.sub(r'`([^`]*)`', _process_inline_code, text)
-    
+    # Цитаты
     text = re.sub(r'^>\s+(.*)$', r'> \1', text, flags=re.MULTILINE)
     
+    # Списки задач
     text = re.sub(r'^-\s+\[x\]\s+(.*)$', r'✅ \1', text, flags=re.MULTILINE)
     text = re.sub(r'^-\s+\[ \]\s+(.*)$', r'⬜ \1', text, flags=re.MULTILINE)
     
+    # Горизонтальные линии
     text = re.sub(r'^---\s*$', r'⎯⎯⎯', text, flags=re.MULTILINE)
     
-    text = re.sub(r'\\\((.*?)\\\)', _process_latex_inline, text)
-    text = re.sub(r'\\\[(.*?)\\\]', _process_latex_display, text)
+    # LaTeX (упрощённо)
+    text = re.sub(r'\\\((.*?)\\\)', r'`\1`', text)
+    text = re.sub(r'\\\[(.*?)\\\]', r'```\n\1\n```', text)
     
-    text = re.sub(r'(\|[^\n]+\|\s*\n\|[-:\s|]+\|\s*\n(?:\|[^\n]+\|\s*\n)+)', _process_table, text)
+    # Ссылки и изображения
+    text = re.sub(r'!\[([^\]]*)\]\((tg://emoji[^)]+)\)', r'![\1](\2)', text)
+    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', r'[🖼 \1](\2)', text)
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'[\1](\2)', text)
     
-    parts = re.split(
-        r'(\|\|.*?\|\||~.*?~|\*.*?\*|_.*?_|`.*?`|```.*?```|\[.*?\]\(.*?\)|> .*?$)',
-        text,
-        flags=re.DOTALL | re.MULTILINE
-    )
+    # Таблицы → моноширинный блок
+    def _table_repl(m):
+        lines = m.group(0).strip().split('\n')
+        if len(lines) < 2: return ""
+        header = " | ".join(cell.strip() for cell in lines[0].split('|')[1:-1])
+        body = "\n".join(
+            " | ".join(cell.strip() for cell in line.split('|')[1:-1])
+            for line in lines[2:] if line.strip()
+        )
+        table = f"{header}\n{body}"
+        return f"```\n{table}\n```"
     
-    result = []
-    for part in parts:
-        if re.match(r'^(\|\|.*?\|\||~.*?~|\*.*?\*|_.*?_|`.*?`|```.*?```|\[.*?\]\(.*?\)|> .*?$)', part, re.DOTALL):
-            result.append(part)
-        else:
-            result.append(_escape_plain_text(part))
+    text = re.sub(r'(\|[^\n]+\|\s*\n\|[-:\s|]+\|\s*\n(?:\|[^\n]+\|\s*\n)+)', _table_repl, text)
     
-    return ''.join(result).strip()
+    return text
 
+def markdown_to_telegram_v2(md_text: str) -> str:
+    """Основная функция конвертации."""
+    v2_text = _convert_markdown_to_v2(md_text)
+    return _escape_outside_markup(v2_text)
 
-def split_message(text: str, max_length: int = 4096) -> list[str]:
+def split_message_safe(text: str, max_length: int = 4096) -> List[str]:
     """
-    Умно разбивает текст на части <= max_length, не ломая MarkdownV2-разметку.
+    Безопасный сплиттер для MarkdownV2.
+    Разбивает ТОЛЬКО в местах, где нет активной разметки.
     """
     if len(text) <= max_length:
         return [text]
-
+    
     parts = []
     current = ""
-    lines = text.split("\n")
-
-    for line in lines:
-        # Если строка сама длиннее лимита — дробим по словам
-        if len(line) > max_length:
-            words = line.split(" ")
-            temp_line = ""
-            for word in words:
-                test = temp_line + (" " if temp_line else "") + word
-                if len(test) > max_length:
-                    if temp_line:
-                        parts.append(temp_line)
-                        temp_line = word
-                    else:
-                        # Слово длиннее лимита — обрезаем принудительно
-                        parts.append(word[:max_length])
-                        temp_line = ""
-                else:
-                    temp_line = test
-            if temp_line:
-                line = temp_line
-
-        # Проверяем, можно ли добавить строку к текущей части
-        test_part = current + ("\n" if current else "") + line
-        if len(test_part) > max_length:
+    
+    # Разбиваем на токены: разметка и обычный текст
+    tokens = re.findall(r'(\|\|.*?\|\||~.*?~|\*.*?\*|_.*?_|`[^`]*`|```[\s\S]*?```|.)', text)
+    
+    for token in tokens:
+        test = current + token
+        if len(test) > max_length:
             if current:
                 parts.append(current)
-            current = line
+                current = token
+            else:
+                # Токен сам длиннее лимита — дробим его как plain text
+                subparts = _split_plain_token(token, max_length)
+                if subparts:
+                    parts.extend(subparts[:-1])
+                    current = subparts[-1]
         else:
-            current = test_part
-
+            current += token
+    
     if current:
         parts.append(current)
-
-    # Финальная проверка: если какая-то часть всё ещё слишком длинная — дробим грубо
-    final_parts = []
+    
+    # Финальная проверка: экранируем любые остаточные спецсимволы
+    safe_parts = []
     for part in parts:
-        while len(part) > max_length:
-            # Ищем безопасную позицию для разреза (последний пробел до лимита)
-            split_pos = part.rfind(" ", 0, max_length)
-            if split_pos == -1:
-                split_pos = max_length  # аварийный разрез
-            final_parts.append(part[:split_pos])
-            part = part[split_pos:].lstrip()
-        if part:
-            final_parts.append(part)
+        try:
+            # Пробуем найти незакрытую разметку
+            if _has_unbalanced_markup(part):
+                # Если есть — отправляем как plain text
+                safe_parts.append(re.sub(f'([{re.escape(MD_V2_CHARS)}])', r'\\\1', part))
+            else:
+                safe_parts.append(part)
+        except Exception:
+            safe_parts.append(re.sub(f'([{re.escape(MD_V2_CHARS)}])', r'\\\1', part))
+    
+    return safe_parts
 
-    return final_parts
+def _split_plain_token(token: str, max_len: int) -> List[str]:
+    """Дробит длинный токен (например, слово) на части."""
+    if len(token) <= max_len:
+        return [token]
+    parts = []
+    while token:
+        if len(token) <= max_len:
+            parts.append(token)
+            break
+        parts.append(token[:max_len])
+        token = token[max_len:]
+    return parts
+
+def _has_unbalanced_markup(text: str) -> bool:
+    """Проверяет, есть ли незакрытая разметка."""
+    pairs = {'*': 0, '_': 0, '~': 0, '|': 0, '`': 0}
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == '\\' and i + 1 < len(text):
+            i += 2  # экранированный символ
+            continue
+        if c == '`':
+            if i + 2 < len(text) and text[i:i+3] == '```':
+                # fenced code — пропускаем до закрытия
+                end = text.find('```', i+3)
+                if end == -1:
+                    return True
+                i = end + 3
+                continue
+            else:
+                pairs['`'] = (pairs['`'] + 1) % 2
+        elif c in pairs:
+            pairs[c] = (pairs[c] + 1) % 2
+        i += 1
+    return any(count != 0 for count in pairs.values())

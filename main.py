@@ -11,7 +11,7 @@ from aiogram.filters import Command
 from aiohttp import ClientSession
 from config import Config
 from chat_manager import ChatHistory
-from md import markdown_to_telegram_v2, split_message
+from md import markdown_to_telegram_v2, split_message_safe
 
 router = Router()
 
@@ -95,7 +95,7 @@ class AIChatBot:
         await history.save()
         text = markdown_to_telegram_v2(reply_text)
         if len(text) > 4096:
-            text = split_message(text)
+            text = split_message_safe(text)
             message = await message.edit_text(text[0], parse_mode=ParseMode.MARKDOWN_V2)
             text.pop(0)
             for chunk in text:
