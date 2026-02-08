@@ -22,8 +22,9 @@ async def load_system_prompt() -> str:
 
 
 class AIChatBot:
-    def __init__(self, config: Config):
-        self.config: Config = config
+    def __init__(self, config: Config, system_prompt: str):
+        self.config = config
+        self.system_prompt = system_prompt
 
     async def handle(self, message: Message, session: ClientSession) -> None:
         user_text = message.text.partition(" ")[2].strip()
@@ -32,7 +33,12 @@ class AIChatBot:
             return
 
         chat_id = message.chat.id
-        history = ChatHistory(chat_id, self.config.history_dir, self.config.max_history)
+        history = ChatHistory(
+            chat_id=chat_id,
+            history_dir=self.config.history_dir,
+            max_history=self.config.max_history,
+            system_prompt=self.system_prompt,
+        )
         await history.load()
         history.add_user_message(user_text)
 
