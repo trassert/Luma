@@ -11,7 +11,7 @@ from aiogram.filters import Command
 from aiohttp import ClientSession
 from config import Config
 from chat_manager import ChatHistory
-from md import markdown_to_telegram_v2
+from md import markdown_to_telegram_v2, split_message
 
 router = Router()
 
@@ -102,7 +102,15 @@ class AIChatBot:
 
         history.add_assistant_message(reply_text)
         await history.save()
-        await message.reply(markdown_to_telegram_v2(reply_text), parse_mode=ParseMode.MARKDOWN_V2)
+        text = markdown_to_telegram_v2(reply_text)
+        if len(text) > 4096:
+            text = split_message(text)
+            message = await message.edit_text(text[0], parse_mode=ParseMode.MARKDOWN_V2)
+            text.pop(0)
+            for chunk in text:
+                message = await message.reply(chunk, parse_mode=ParseMode.MARKDOWN_V2)
+            return
+        return await message.edit_text(text, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 @router.message(Command("ии", ignore_case=True))
@@ -114,7 +122,9 @@ async def command_ai(
     response = FloodWait.request()
     if response is False:
         return
-    await asyncio.sleep(response)
+    if response > 0:
+        message = await message.reply()
+        await asyncio.sleep(response)
     await ai_bot.handle(message, session)
 
 

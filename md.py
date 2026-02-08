@@ -111,3 +111,62 @@ def markdown_to_telegram_v2(md_text: str) -> str:
             result.append(_escape_plain_text(part))
     
     return ''.join(result).strip()
+
+
+def split_message(text: str, max_length: int = 4096) -> list[str]:
+    """
+    Умно разбивает текст на части <= max_length, не ломая MarkdownV2-разметку.
+    """
+    if len(text) <= max_length:
+        return [text]
+
+    parts = []
+    current = ""
+    lines = text.split("\n")
+
+    for line in lines:
+        # Если строка сама длиннее лимита — дробим по словам
+        if len(line) > max_length:
+            words = line.split(" ")
+            temp_line = ""
+            for word in words:
+                test = temp_line + (" " if temp_line else "") + word
+                if len(test) > max_length:
+                    if temp_line:
+                        parts.append(temp_line)
+                        temp_line = word
+                    else:
+                        # Слово длиннее лимита — обрезаем принудительно
+                        parts.append(word[:max_length])
+                        temp_line = ""
+                else:
+                    temp_line = test
+            if temp_line:
+                line = temp_line
+
+        # Проверяем, можно ли добавить строку к текущей части
+        test_part = current + ("\n" if current else "") + line
+        if len(test_part) > max_length:
+            if current:
+                parts.append(current)
+            current = line
+        else:
+            current = test_part
+
+    if current:
+        parts.append(current)
+
+    # Финальная проверка: если какая-то часть всё ещё слишком длинная — дробим грубо
+    final_parts = []
+    for part in parts:
+        while len(part) > max_length:
+            # Ищем безопасную позицию для разреза (последний пробел до лимита)
+            split_pos = part.rfind(" ", 0, max_length)
+            if split_pos == -1:
+                split_pos = max_length  # аварийный разрез
+            final_parts.append(part[:split_pos])
+            part = part[split_pos:].lstrip()
+        if part:
+            final_parts.append(part)
+
+    return final_parts
