@@ -3,11 +3,12 @@ from typing import List, Dict
 import orjson
 import aiofiles
 
+
 class ChatHistory:
     def __init__(self, chat_id: int, history_dir: Path, max_history: int):
         self.chat_id = chat_id
         self._history_dir = history_dir
-        self._max_len = max_history * 2  # user + assistant
+        self._max_len = max_history * 2
         self._file_path = self._history_dir / f"{chat_id}.json"
         self._messages: List[Dict[str, str]] = []
 
@@ -25,7 +26,7 @@ class ChatHistory:
 
     async def save(self) -> None:
         self._history_dir.mkdir(exist_ok=True)
-        trimmed = self._messages[-self._max_len:]
+        trimmed = self._messages[-self._max_len :]
         data = orjson.dumps(trimmed)
         async with aiofiles.open(self._file_path, "wb") as f:
             await f.write(data)

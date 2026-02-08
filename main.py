@@ -32,9 +32,7 @@ class AIChatBot:
             return
 
         chat_id = message.chat.id
-        history = ChatHistory(
-            chat_id, self.config.history_dir, self.config.max_history
-        )
+        history = ChatHistory(chat_id, self.config.history_dir, self.config.max_history)
         await history.load()
         history.add_user_message(user_text)
 
@@ -58,9 +56,7 @@ class AIChatBot:
             ) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
-                    await message.reply(
-                        f"⚠️ Groq error: {resp.status}\n{error_text}"
-                    )
+                    await message.reply(f"⚠️ Groq error: {resp.status}\n{error_text}")
                     return
 
                 data = orjson.loads(await resp.read())
@@ -75,7 +71,7 @@ class AIChatBot:
 
 
 @router.message(Command("ии", ignore_case=True))
-async def command_ii_handler(
+async def command_ai(
     message: Message, bot: Bot, session: ClientSession, ai_bot: AIChatBot
 ):
     await ai_bot.handle(message, session)
